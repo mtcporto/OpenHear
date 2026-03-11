@@ -1,0 +1,1054 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OpenHear MVP</title>
+  <style>
+    :root {
+      --bg-1: #f7efe3;
+      --bg-2: #efe1c7;
+      --ink: #1f1b16;
+      --accent: #0f6b5f;
+      --accent-2: #e07a2f;
+      --panel: #fff8ee;
+      --muted: #6b5d4a;
+      --shadow: rgba(31, 27, 22, 0.18);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Space Grotesk", "IBM Plex Sans", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: radial-gradient(900px 500px at 10% 10%, var(--bg-2), transparent),
+                  radial-gradient(700px 400px at 90% 20%, #f2d7b2, transparent),
+                  linear-gradient(180deg, var(--bg-1), #fdf7ee 70%);
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 32px 16px;
+    }
+
+    .app {
+      width: min(720px, 100%);
+      background: var(--panel);
+      border: 2px solid #ead7bf;
+      border-radius: 18px;
+      box-shadow: 0 22px 60px var(--shadow);
+      padding: 28px;
+      display: grid;
+      gap: 20px;
+      animation: rise 420ms ease-out;
+    }
+
+    @keyframes rise {
+      from { transform: translateY(10px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    header {
+      display: grid;
+      gap: 8px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(26px, 3vw, 34px);
+      letter-spacing: -0.02em;
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .controls {
+      display: grid;
+      gap: 16px;
+    }
+
+    .row {
+      display: grid;
+      gap: 12px;
+    }
+
+    .row label {
+      font-weight: 600;
+    }
+
+    select {
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid #e1cbb1;
+      background: #fffaf3;
+      font-size: 14px;
+    }
+
+    input[type="text"] {
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid #e1cbb1;
+      background: #fffaf3;
+      font-size: 13px;
+      width: 100%;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #c3b49f;
+      box-shadow: inset 0 0 0 2px #b49f85;
+      transition: transform 160ms ease, background 160ms ease;
+    }
+
+    .dot.active {
+      background: #22b07d;
+      transform: scale(1.2);
+      box-shadow: 0 0 0 4px rgba(34, 176, 125, 0.2);
+    }
+
+    .actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      border: none;
+      padding: 12px 18px;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 120ms ease, box-shadow 120ms ease;
+    }
+
+    button.primary {
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 12px 20px rgba(15, 107, 95, 0.25);
+    }
+
+    button.secondary {
+      background: #f2e4d0;
+      color: var(--ink);
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .note {
+      border-left: 4px solid var(--accent-2);
+      background: #fff3e7;
+      padding: 10px 12px;
+      font-size: 14px;
+      color: #6a3d1b;
+    }
+
+    .mini-btn {
+      background: #f4e7d4;
+      color: var(--ink);
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-weight: 700;
+      font-size: 13px;
+      align-self: start;
+    }
+
+    .values {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .config {
+      border: 1px dashed #e3cfb6;
+      border-radius: 12px;
+      padding: 12px;
+      background: #fffaf4;
+    }
+
+    .config summary {
+      cursor: pointer;
+      font-weight: 700;
+      color: var(--ink);
+      list-style: none;
+    }
+
+    .config summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .wave {
+      width: 100%;
+      height: 120px;
+      border-radius: 12px;
+      background: #efe0c9;
+      display: block;
+    }
+
+    .meter {
+      width: 100%;
+      height: 12px;
+      border-radius: 999px;
+      background: #ead7bf;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .meter-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #1d8a6f, #e0a03a, #e06a2f);
+      transition: width 80ms linear;
+    }
+
+    .meter-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .clip {
+      font-size: 12px;
+      font-weight: 700;
+      color: #b3471f;
+      opacity: 0.2;
+      transition: opacity 120ms ease;
+    }
+
+    .clip.active {
+      opacity: 1;
+    }
+
+    .warn {
+      border-left: 4px solid #b3471f;
+      background: #fff0e3;
+      color: #7a2e14;
+      padding: 10px 12px;
+      font-size: 13px;
+      display: none;
+    }
+
+    .warn.active {
+      display: block;
+    }
+
+    .toggle {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+    }
+
+    .toggle input {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header>
+      <h1>OpenHear MVP</h1>
+      <p>Prototipo local de amplificador auditivo com baixa latencia usando Web Audio API.</p>
+    </header>
+
+    <section class="controls">
+      <div class="actions">
+        <button id="startBtn" class="primary">Iniciar escuta</button>
+        <button id="stopBtn" class="secondary" disabled>Parar</button>
+        <div class="status" aria-live="polite">
+          <span id="micDot" class="dot"></span>
+          <span id="micLabel">Microfone inativo</span>
+        </div>
+      </div>
+
+      <canvas id="waveform" class="wave" width="640" height="120"></canvas>
+
+      <details class="config">
+        <summary>Configuracoes</summary>
+        <div class="row">
+          <label for="inputDevice">Microfone</label>
+          <select id="inputDevice"></select>
+        </div>
+
+        <div class="row">
+          <label for="outputDevice">Saida de audio</label>
+          <select id="outputDevice"></select>
+        </div>
+
+        <div class="row">
+          <button id="refreshDevices" class="mini-btn" type="button">Atualizar dispositivos</button>
+        </div>
+
+        <div class="row">
+          <label for="presetSelect">Presets</label>
+          <select id="presetSelect"></select>
+          <div class="values">
+            <input id="presetName" type="text" placeholder="Nome do preset" />
+            <button id="savePreset" class="mini-btn" type="button">Salvar preset</button>
+          </div>
+        </div>
+
+        <div class="row">
+          <label class="toggle" for="lowLatency">
+            <input id="lowLatency" type="checkbox" checked />
+            Priorizar baixa latencia
+          </label>
+        </div>
+
+        <div class="row">
+          <label>Nivel de entrada (RMS)</label>
+          <div class="meter" aria-hidden="true">
+            <div id="meterFill" class="meter-fill"></div>
+          </div>
+          <div class="meter-labels">
+            <span>Silencio</span>
+            <span id="meterDb">-60 dB</span>
+            <span class="clip" id="clipFlag">CLIP</span>
+          </div>
+        </div>
+
+        <div id="feedbackWarn" class="warn">Possivel realimentacao (microfonia). Reduza o volume ou afaste o microfone.</div>
+
+        <div class="row">
+          <label for="noiseCut">Corte de graves (ruido)</label>
+          <input id="noiseCut" type="range" min="60" max="200" step="10" value="100" />
+          <div class="values">
+            <span>Leve</span>
+            <span id="noiseCutVal">100 Hz</span>
+            <span>Forte</span>
+          </div>
+        </div>
+
+        <div class="row">
+          <label class="toggle" for="browserNoise">
+            <input id="browserNoise" type="checkbox" />
+            Reduzir ruido de fundo (navegador)
+          </label>
+        </div>
+
+        <div class="row">
+          <label class="toggle" for="noiseGate">
+          <input id="noiseGate" type="checkbox" />
+            Gate de ruido (abre quando ha fala)
+          </label>
+        </div>
+
+        <div class="row">
+          <button id="calibrateGate" class="mini-btn" type="button">Calibrar ruido ambiente</button>
+        </div>
+
+        <div class="row">
+          <label for="gateThreshold">Sensibilidade do gate</label>
+          <input id="gateThreshold" type="range" min="-60" max="-20" step="1" value="-50" />
+          <div class="values">
+            <span>Mais aberto</span>
+            <span id="gateThresholdVal">-50 dB</span>
+            <span>Mais fechado</span>
+          </div>
+        </div>
+
+        <div class="row">
+          <label for="volume">Volume geral</label>
+          <input id="volume" type="range" min="-6" max="24" step="1" value="6" />
+          <div class="values">
+            <span>Baixo</span>
+            <span id="volumeVal">+6 dB</span>
+            <span>Alto</span>
+          </div>
+        </div>
+
+        <div class="row">
+          <label for="speech">Enfase de fala (2-4 kHz)</label>
+          <input id="speech" type="range" min="0" max="12" step="1" value="4" />
+          <div class="values">
+            <span>Neutro</span>
+            <span id="speechVal">+4 dB</span>
+            <span>Clareza</span>
+          </div>
+        </div>
+      </details>
+
+    </section>
+
+    <div class="note">
+      Use fones de ouvido. Se houver eco ou latencia alta, reduza o volume e escolha o microfone do headset.
+    </div>
+  </main>
+
+  <script>
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const micDot = document.getElementById('micDot');
+    const micLabel = document.getElementById('micLabel');
+    const inputDevice = document.getElementById('inputDevice');
+    const outputDevice = document.getElementById('outputDevice');
+    const refreshDevices = document.getElementById('refreshDevices');
+    const presetSelect = document.getElementById('presetSelect');
+    const presetName = document.getElementById('presetName');
+    const savePreset = document.getElementById('savePreset');
+    const lowLatency = document.getElementById('lowLatency');
+    const meterFill = document.getElementById('meterFill');
+    const meterDb = document.getElementById('meterDb');
+    const clipFlag = document.getElementById('clipFlag');
+    const feedbackWarn = document.getElementById('feedbackWarn');
+    const waveform = document.getElementById('waveform');
+    const noiseCut = document.getElementById('noiseCut');
+    const noiseCutVal = document.getElementById('noiseCutVal');
+    const browserNoise = document.getElementById('browserNoise');
+    const noiseGate = document.getElementById('noiseGate');
+    const calibrateGate = document.getElementById('calibrateGate');
+    const gateThreshold = document.getElementById('gateThreshold');
+    const gateThresholdVal = document.getElementById('gateThresholdVal');
+    const volume = document.getElementById('volume');
+    const speech = document.getElementById('speech');
+    const volumeVal = document.getElementById('volumeVal');
+    const speechVal = document.getElementById('speechVal');
+
+    let audioCtx = null;
+    let micStream = null;
+    let sourceNode = null;
+    let noiseCutNode = null;
+    let noiseLowpassNode = null;
+    let volumeNode = null;
+    let speechNode = null;
+    let compressorNode = null;
+    let gateNode = null;
+    let analyserNode = null;
+    let mediaDest = null;
+    let outputEl = null;
+    let meterPeakHold = 0;
+    let feedbackHold = 0;
+    let rafId = null;
+    let currentRmsDb = -60;
+    let meterLastAt = 0;
+    let userSelectedInput = false;
+    let userSelectedOutput = false;
+
+    const PRESET_KEY = 'openhear_presets';
+    const BUILT_IN_PRESETS = {
+      default: {
+        name: 'Padrao',
+        volume: 6,
+        speech: 4,
+        noiseCut: 100,
+        gateThreshold: -50,
+        noiseGate: false,
+        browserNoise: false,
+        lowLatency: true
+      },
+      fala: {
+        name: 'Fala clara',
+        volume: 8,
+        speech: 6,
+        noiseCut: 120,
+        gateThreshold: -48,
+        noiseGate: false,
+        browserNoise: true,
+        lowLatency: true
+      },
+      ruido: {
+        name: 'Ambiente ruidoso',
+        volume: 6,
+        speech: 7,
+        noiseCut: 140,
+        gateThreshold: -45,
+        noiseGate: true,
+        browserNoise: true,
+        lowLatency: false
+      }
+    };
+
+    const outputSupported = typeof HTMLMediaElement !== 'undefined' && 'setSinkId' in HTMLMediaElement.prototype;
+
+    function dbToGain(db) {
+      return Math.pow(10, db / 20);
+    }
+
+    function setStatus(active) {
+      micDot.classList.toggle('active', active);
+      micLabel.textContent = active ? 'Microfone ativo' : 'Microfone inativo';
+    }
+
+    function updateVolume() {
+      const db = Number(volume.value);
+      volumeVal.textContent = `${db >= 0 ? '+' : ''}${db} dB`;
+      if (volumeNode) volumeNode.gain.value = dbToGain(db);
+    }
+
+    function updateSpeech() {
+      const db = Number(speech.value);
+      speechVal.textContent = `+${db} dB`;
+      if (speechNode) speechNode.gain.value = db;
+    }
+
+    function updateNoiseCut() {
+      const hz = Number(noiseCut.value);
+      noiseCutVal.textContent = `${hz} Hz`;
+      if (noiseCutNode) noiseCutNode.frequency.value = hz;
+    }
+
+    function updateGateThreshold() {
+      const db = Number(gateThreshold.value);
+      gateThresholdVal.textContent = `${db} dB`;
+      if (gateNode && audioCtx) {
+        const param = gateNode.parameters.get('thresholdDb');
+        param.setValueAtTime(db, audioCtx.currentTime);
+      }
+    }
+
+    function updateGateEnabled() {
+      if (gateNode && audioCtx) {
+        const param = gateNode.parameters.get('gateEnabled');
+        param.setValueAtTime(noiseGate.checked ? 1 : 0, audioCtx.currentTime);
+      }
+    }
+
+    async function calibrateNoiseFloor() {
+      if (!audioCtx || !analyserNode) {
+        alert('Inicie a escuta antes de calibrar.');
+        return;
+      }
+      const start = Date.now();
+      let sum = 0;
+      let count = 0;
+      while (Date.now() - start < 1500) {
+        sum += currentRmsDb;
+        count += 1;
+        await new Promise(r => setTimeout(r, 50));
+      }
+      if (count === 0) return;
+      const avg = sum / count;
+      const newThreshold = Math.min(-20, Math.max(-70, Math.round(avg + 6)));
+      gateThreshold.value = newThreshold;
+      updateGateThreshold();
+      noiseGate.checked = true;
+      updateGateEnabled();
+    }
+
+    function startWaveform() {
+      if (!analyserNode || !waveform) return;
+      const ctx = waveform.getContext('2d');
+      const data = new Uint8Array(analyserNode.fftSize);
+      const rect = waveform.getBoundingClientRect();
+      waveform.width = Math.max(1, Math.floor(rect.width));
+      waveform.height = Math.max(1, Math.floor(rect.height));
+
+      const draw = () => {
+        rafId = requestAnimationFrame(draw);
+        analyserNode.getByteTimeDomainData(data);
+        ctx.clearRect(0, 0, waveform.width, waveform.height);
+        ctx.fillStyle = '#efe0c9';
+        ctx.fillRect(0, 0, waveform.width, waveform.height);
+
+        const barCount = 64;
+        const step = Math.floor(data.length / barCount);
+        const mid = waveform.height / 2;
+        const barW = waveform.width / barCount;
+        ctx.fillStyle = '#2b1f1a';
+
+        let sum = 0;
+        for (let i = 0; i < barCount; i += 1) {
+          let peak = 0;
+          for (let j = 0; j < step; j += 1) {
+            const v = (data[i * step + j] - 128) / 128;
+            const av = Math.abs(v);
+            if (av > peak) peak = av;
+            sum += v * v;
+          }
+          const h = Math.max(2, peak * waveform.height);
+          const x = i * barW;
+          ctx.fillRect(x + barW * 0.25, mid - h / 2, barW * 0.5, h);
+        }
+
+        const rms = Math.sqrt(sum / data.length);
+        const rmsDb = 20 * Math.log10(rms + 1e-8);
+        currentRmsDb = rmsDb;
+        if (Date.now() - meterLastAt > 500) {
+          const norm = Math.min(1, Math.max(0, (rmsDb + 60) / 60));
+          meterFill.style.width = `${Math.round(norm * 100)}%`;
+          meterDb.textContent = `${Math.round(rmsDb)} dB`;
+        }
+      };
+
+      draw();
+    }
+
+    function stopWaveform() {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = null;
+      const ctx = waveform.getContext('2d');
+      ctx.clearRect(0, 0, waveform.width, waveform.height);
+      ctx.fillStyle = '#efe0c9';
+      ctx.fillRect(0, 0, waveform.width, waveform.height);
+    }
+
+    function applyPreset(preset) {
+      if (!preset) return;
+      volume.value = preset.volume;
+      speech.value = preset.speech;
+      noiseCut.value = preset.noiseCut;
+      gateThreshold.value = preset.gateThreshold;
+      noiseGate.checked = Boolean(preset.noiseGate);
+      browserNoise.checked = Boolean(preset.browserNoise);
+      lowLatency.checked = preset.lowLatency ?? true;
+      updateVolume();
+      updateSpeech();
+      updateNoiseCut();
+      updateGateThreshold();
+      updateGateEnabled();
+    }
+
+    function loadPresets() {
+      const stored = localStorage.getItem(PRESET_KEY);
+      let custom = {};
+      try {
+        custom = stored ? JSON.parse(stored) : {};
+      } catch (_) {
+        custom = {};
+      }
+
+      presetSelect.innerHTML = '';
+      Object.entries(BUILT_IN_PRESETS).forEach(([id, data]) => {
+        presetSelect.append(optionEl(id, data.name));
+      });
+      Object.entries(custom).forEach(([id, data]) => {
+        presetSelect.append(optionEl(id, data.name || id));
+      });
+    }
+
+    function saveCustomPreset() {
+      const name = (presetName.value || '').trim();
+      if (!name) {
+        alert('Informe um nome para o preset.');
+        return;
+      }
+      const stored = localStorage.getItem(PRESET_KEY);
+      let custom = {};
+      try {
+        custom = stored ? JSON.parse(stored) : {};
+      } catch (_) {
+        custom = {};
+      }
+      const id = `custom_${Date.now()}`;
+      custom[id] = {
+        name,
+        volume: Number(volume.value),
+        speech: Number(speech.value),
+        noiseCut: Number(noiseCut.value),
+        gateThreshold: Number(gateThreshold.value),
+        noiseGate: noiseGate.checked,
+        browserNoise: browserNoise.checked,
+        lowLatency: lowLatency.checked
+      };
+      localStorage.setItem(PRESET_KEY, JSON.stringify(custom));
+      loadPresets();
+      presetSelect.value = id;
+      presetName.value = '';
+    }
+
+    function autoSelectHeadset() {
+      const inputOpts = Array.from(inputDevice.options);
+      const outputOpts = Array.from(outputDevice.options);
+
+      const pick = (opts) => {
+        const matches = opts.filter(o => /headset|usb|logi|jabra|plantronics|bluetooth/i.test(o.textContent));
+        if (matches.length) return matches[0].value;
+        return null;
+      };
+
+      if (!userSelectedInput) {
+        const inputPick = pick(inputOpts);
+        if (inputPick) inputDevice.value = inputPick;
+      }
+
+      if (!userSelectedOutput) {
+        const outputPick = pick(outputOpts);
+        if (outputPick) outputDevice.value = outputPick;
+      }
+    }
+
+    function optionEl(value, label) {
+      const opt = document.createElement('option');
+      opt.value = value;
+      opt.textContent = label;
+      return opt;
+    }
+
+    async function loadDevices() {
+      if (!navigator.mediaDevices?.enumerateDevices) {
+        inputDevice.innerHTML = '';
+        outputDevice.innerHTML = '';
+        inputDevice.append(optionEl('default', 'Dispositivos nao suportados'));
+        outputDevice.append(optionEl('default', 'Dispositivos nao suportados'));
+        inputDevice.disabled = true;
+        outputDevice.disabled = true;
+        return;
+      }
+
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const inputs = devices.filter(d => d.kind === 'audioinput');
+      const outputs = devices.filter(d => d.kind === 'audiooutput');
+
+      const prevInput = inputDevice.value;
+      const prevOutput = outputDevice.value;
+
+      inputDevice.innerHTML = '';
+      outputDevice.innerHTML = '';
+
+      if (!inputs.length) {
+        inputDevice.append(optionEl('default', 'Nenhum microfone encontrado'));
+      } else {
+        inputs.forEach((d, i) => {
+          const label = d.label || `Microfone ${i + 1}`;
+          inputDevice.append(optionEl(d.deviceId, label));
+        });
+      }
+
+      if (!outputSupported) {
+        outputDevice.append(optionEl('default', 'Selecao de saida nao suportada'));
+        outputDevice.disabled = true;
+      } else if (!outputs.length) {
+        outputDevice.append(optionEl('default', 'Nenhuma saida encontrada'));
+      } else {
+        outputs.forEach((d, i) => {
+          const label = d.label || `Saida ${i + 1}`;
+          outputDevice.append(optionEl(d.deviceId, label));
+        });
+      }
+
+      if (prevInput) inputDevice.value = prevInput;
+      if (prevOutput) outputDevice.value = prevOutput;
+      autoSelectHeadset();
+    }
+
+    async function ensureDeviceLabels() {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const hasLabels = devices.some(d => d.kind === 'audioinput' && d.label);
+      if (hasLabels) return;
+
+      let tempStream = null;
+      try {
+        tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (_) {
+        return;
+      }
+
+      try {
+        tempStream.getTracks().forEach(t => t.stop());
+      } finally {
+        await loadDevices();
+      }
+    }
+
+    async function refreshDeviceLists() {
+      await ensureDeviceLabels();
+      await loadDevices();
+    }
+
+    async function startAudio() {
+      if (audioCtx) return;
+
+      const latencyHint = lowLatency.checked ? 0.01 : 'interactive';
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)({
+        latencyHint
+      });
+      await audioCtx.resume();
+      try {
+        await audioCtx.audioWorklet.addModule('gate-meter-processor.js');
+      } catch (err) {
+        console.error('Falha ao carregar AudioWorklet.', err);
+        alert('AudioWorklet nao carregou. Abra a pagina via http://localhost ou https.');
+        throw err;
+      }
+
+      const inputId = inputDevice.value && inputDevice.value !== 'default' ? inputDevice.value : undefined;
+      const noiseEnabled = browserNoise.checked;
+      const baseAudio = {
+        deviceId: inputId ? { exact: inputId } : undefined,
+        echoCancellation: noiseEnabled,
+        noiseSuppression: noiseEnabled,
+        autoGainControl: noiseEnabled
+      };
+
+      try {
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: baseAudio });
+      } catch (err) {
+        console.warn('Falha ao abrir microfone selecionado. Tentando padrao.', err);
+        const fallbackAudio = {
+          echoCancellation: noiseEnabled,
+          noiseSuppression: noiseEnabled,
+          autoGainControl: noiseEnabled
+        };
+        try {
+          micStream = await navigator.mediaDevices.getUserMedia({ audio: fallbackAudio });
+        } catch (err2) {
+          if (noiseEnabled) {
+            console.warn('Falha com reducao de ruido. Tentando sem.', err2);
+            micStream = await navigator.mediaDevices.getUserMedia({
+              audio: {
+                deviceId: inputId ? { exact: inputId } : undefined,
+                echoCancellation: false,
+                noiseSuppression: false,
+                autoGainControl: false
+              }
+            });
+          } else {
+            throw err2;
+          }
+        }
+      }
+
+      sourceNode = audioCtx.createMediaStreamSource(micStream);
+      const activeTrack = micStream.getAudioTracks()[0];
+      if (activeTrack?.label) {
+        micLabel.textContent = `Microfone ativo: ${activeTrack.label}`;
+      } else {
+        micLabel.textContent = 'Microfone ativo';
+      }
+
+      noiseCutNode = audioCtx.createBiquadFilter();
+      noiseCutNode.type = 'highpass';
+      noiseCutNode.frequency.value = Number(noiseCut.value);
+      noiseCutNode.Q.value = 0.707;
+
+      noiseLowpassNode = audioCtx.createBiquadFilter();
+      noiseLowpassNode.type = 'lowpass';
+      noiseLowpassNode.frequency.value = 6500;
+      noiseLowpassNode.Q.value = 0.707;
+
+      speechNode = audioCtx.createBiquadFilter();
+      speechNode.type = 'peaking';
+      speechNode.frequency.value = 3000;
+      speechNode.Q.value = 1.0;
+      speechNode.gain.value = Number(speech.value);
+
+      compressorNode = audioCtx.createDynamicsCompressor();
+      compressorNode.threshold.value = -35;
+      compressorNode.knee.value = 24;
+      compressorNode.ratio.value = 4;
+      compressorNode.attack.value = 0.003;
+      compressorNode.release.value = 0.25;
+
+      gateNode = new AudioWorkletNode(audioCtx, 'gate-meter-processor', {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        outputChannelCount: [1],
+        parameterData: {
+          thresholdDb: Number(gateThreshold.value),
+          gateEnabled: noiseGate.checked ? 1 : 0,
+          minGain: 0.15
+        }
+      });
+      gateNode.port.onmessage = (event) => {
+        const data = event.data;
+        if (!data || data.type !== 'meter') return;
+        const rmsDb = data.rmsDb;
+        const peak = data.peak;
+        currentRmsDb = rmsDb;
+        meterLastAt = Date.now();
+        const norm = Math.min(1, Math.max(0, (rmsDb + 60) / 60));
+        meterFill.style.width = `${Math.round(norm * 100)}%`;
+        meterDb.textContent = `${Math.round(rmsDb)} dB`;
+
+        if (peak > 0.98) {
+          meterPeakHold = 12;
+        }
+        if (meterPeakHold > 0) {
+          clipFlag.classList.add('active');
+          meterPeakHold -= 1;
+        } else {
+          clipFlag.classList.remove('active');
+        }
+
+        if (rmsDb > -18) {
+          feedbackHold = 50;
+        } else if (feedbackHold > 0) {
+          feedbackHold -= 1;
+        }
+        if (feedbackHold > 0) {
+          feedbackWarn.classList.add('active');
+        } else {
+          feedbackWarn.classList.remove('active');
+        }
+      };
+
+      volumeNode = audioCtx.createGain();
+      volumeNode.gain.value = dbToGain(Number(volume.value));
+
+      if (outputSupported) {
+        mediaDest = audioCtx.createMediaStreamDestination();
+      }
+
+      const chain = sourceNode
+        .connect(noiseCutNode)
+        .connect(noiseLowpassNode)
+        .connect(speechNode)
+        .connect(compressorNode)
+        .connect(gateNode)
+        .connect(volumeNode);
+      analyserNode = audioCtx.createAnalyser();
+      analyserNode.fftSize = 1024;
+      volumeNode.connect(analyserNode);
+      startWaveform();
+
+      if (outputSupported && mediaDest) {
+        chain.connect(mediaDest);
+        outputEl = new Audio();
+        outputEl.autoplay = true;
+        outputEl.srcObject = mediaDest.stream;
+        const outputId = outputDevice.value && outputDevice.value !== 'default' ? outputDevice.value : 'default';
+        let needsFallback = false;
+        try {
+          await outputEl.setSinkId(outputId);
+          await outputEl.play();
+        } catch (err) {
+          console.warn('Nao foi possivel usar a saida selecionada. Usando saida padrao.', err);
+          needsFallback = true;
+        }
+        if (needsFallback) {
+          try { outputEl.pause(); } catch (_) {}
+          outputEl.srcObject = null;
+          outputEl = null;
+          chain.connect(audioCtx.destination);
+        }
+      } else {
+        chain.connect(audioCtx.destination);
+      }
+
+      setStatus(true);
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+    }
+
+    async function stopAudio() {
+      if (!audioCtx) return;
+
+      sourceNode?.disconnect();
+      noiseCutNode?.disconnect();
+      noiseLowpassNode?.disconnect();
+      speechNode?.disconnect();
+      compressorNode?.disconnect();
+      gateNode?.disconnect();
+      analyserNode?.disconnect();
+      volumeNode?.disconnect();
+      mediaDest?.disconnect?.();
+
+      if (micStream) {
+        micStream.getTracks().forEach(track => track.stop());
+      }
+
+      if (outputEl) {
+        outputEl.pause();
+        outputEl.srcObject = null;
+      }
+
+      if (gateNode?.port) gateNode.port.onmessage = null;
+
+      await audioCtx.close();
+      audioCtx = null;
+      micStream = null;
+      sourceNode = null;
+      noiseCutNode = null;
+      noiseLowpassNode = null;
+      speechNode = null;
+      compressorNode = null;
+      gateNode = null;
+      analyserNode = null;
+      volumeNode = null;
+      mediaDest = null;
+      outputEl = null;
+      meterFill.style.width = '0%';
+      meterDb.textContent = '-60 dB';
+      clipFlag.classList.remove('active');
+      feedbackWarn.classList.remove('active');
+      stopWaveform();
+
+      setStatus(false);
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+    }
+
+    startBtn.addEventListener('click', () => {
+      startAudio().catch(err => {
+        console.error(err);
+        alert('Falha ao acessar o microfone. Verifique as permissoes do navegador.');
+        stopAudio();
+      });
+    });
+
+    stopBtn.addEventListener('click', () => {
+      stopAudio();
+    });
+
+    volume.addEventListener('input', updateVolume);
+    speech.addEventListener('input', updateSpeech);
+    noiseCut.addEventListener('input', updateNoiseCut);
+    gateThreshold.addEventListener('input', updateGateThreshold);
+    refreshDevices.addEventListener('click', () => {
+      refreshDeviceLists().catch(() => {});
+    });
+    inputDevice.addEventListener('change', () => { userSelectedInput = true; });
+    outputDevice.addEventListener('change', () => { userSelectedOutput = true; });
+    savePreset.addEventListener('click', saveCustomPreset);
+    presetSelect.addEventListener('change', () => {
+      const id = presetSelect.value;
+      const built = BUILT_IN_PRESETS[id];
+      if (built) {
+        applyPreset(built);
+        return;
+      }
+      const stored = localStorage.getItem(PRESET_KEY);
+      if (!stored) return;
+      try {
+        const custom = JSON.parse(stored);
+        applyPreset(custom[id]);
+      } catch (_) {}
+    });
+    lowLatency.addEventListener('change', () => {
+      if (audioCtx) alert('Pare e inicie novamente para aplicar a latencia.');
+    });
+    noiseGate.addEventListener('change', updateGateEnabled);
+    calibrateGate.addEventListener('click', () => {
+      calibrateNoiseFloor().catch(() => {});
+    });
+
+    navigator.mediaDevices?.addEventListener?.('devicechange', loadDevices);
+    refreshDeviceLists().catch(() => {});
+
+    loadPresets();
+    applyPreset(BUILT_IN_PRESETS.default);
+    updateVolume();
+    updateSpeech();
+    updateNoiseCut();
+    updateGateThreshold();
+    updateGateEnabled();
+  </script>
+</body>
+</html>
