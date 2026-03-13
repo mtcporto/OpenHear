@@ -376,10 +376,10 @@
 
         <div class="row">
           <label for="volume">Volume geral</label>
-          <input id="volume" type="range" min="-6" max="24" step="1" value="6" />
+          <input id="volume" type="range" min="-6" max="40" step="1" value="18" />
           <div class="values">
             <span>Baixo</span>
-            <span id="volumeVal">+6 dB</span>
+            <span id="volumeVal">+18 dB</span>
             <span>Alto</span>
           </div>
         </div>
@@ -455,17 +455,17 @@
     const BUILT_IN_PRESETS = {
       default: {
         name: 'Padrao',
-        volume: 6,
+        volume: 18,
         speech: 4,
         noiseCut: 100,
         gateThreshold: -50,
         noiseGate: false,
-        browserNoise: false,
+        browserNoise: true,
         lowLatency: true
       },
       fala: {
         name: 'Fala clara',
-        volume: 8,
+        volume: 22,
         speech: 6,
         noiseCut: 120,
         gateThreshold: -48,
@@ -475,7 +475,7 @@
       },
       ruido: {
         name: 'Ambiente ruidoso',
-        volume: 6,
+        volume: 20,
         speech: 7,
         noiseCut: 140,
         gateThreshold: -45,
@@ -840,7 +840,7 @@
 
       noiseLowpassNode = audioCtx.createBiquadFilter();
       noiseLowpassNode.type = 'lowpass';
-      noiseLowpassNode.frequency.value = 6500;
+      noiseLowpassNode.frequency.value = 9000;
       noiseLowpassNode.Q.value = 0.707;
 
       speechNode = audioCtx.createBiquadFilter();
@@ -849,12 +849,15 @@
       speechNode.Q.value = 1.0;
       speechNode.gain.value = Number(speech.value);
 
+      volumeNode = audioCtx.createGain();
+      volumeNode.gain.value = dbToGain(Number(volume.value));
+
       compressorNode = audioCtx.createDynamicsCompressor();
-      compressorNode.threshold.value = -35;
+      compressorNode.threshold.value = -55;
       compressorNode.knee.value = 24;
-      compressorNode.ratio.value = 4;
-      compressorNode.attack.value = 0.003;
-      compressorNode.release.value = 0.25;
+      compressorNode.ratio.value = 6;
+      compressorNode.attack.value = 0.005;
+      compressorNode.release.value = 0.15;
 
       gateNode = new AudioWorkletNode(audioCtx, 'gate-meter-processor', {
         numberOfInputs: 1,
@@ -899,27 +902,26 @@
         }
       };
 
-      volumeNode = audioCtx.createGain();
-      volumeNode.gain.value = dbToGain(Number(volume.value));
-
       if (outputSupported) {
         mediaDest = audioCtx.createMediaStreamDestination();
       }
 
+      // Cadeia: source → highpass → lowpass → peaking → volume → compressor → gate
       const chain = sourceNode
         .connect(noiseCutNode)
         .connect(noiseLowpassNode)
         .connect(speechNode)
+        .connect(volumeNode)
         .connect(compressorNode)
-        .connect(gateNode)
-        .connect(volumeNode);
+        .connect(gateNode);
+
       analyserNode = audioCtx.createAnalyser();
       analyserNode.fftSize = 1024;
-      volumeNode.connect(analyserNode);
+      gateNode.connect(analyserNode);
       startWaveform();
 
       if (outputSupported && mediaDest) {
-        chain.connect(mediaDest);
+        gateNode.connect(mediaDest);
         outputEl = new Audio();
         outputEl.autoplay = true;
         outputEl.srcObject = mediaDest.stream;
@@ -936,10 +938,10 @@
           try { outputEl.pause(); } catch (_) {}
           outputEl.srcObject = null;
           outputEl = null;
-          chain.connect(audioCtx.destination);
+          gateNode.connect(audioCtx.destination);
         }
       } else {
-        chain.connect(audioCtx.destination);
+        gateNode.connect(audioCtx.destination);
       }
 
       setStatus(true);
@@ -954,10 +956,10 @@
       noiseCutNode?.disconnect();
       noiseLowpassNode?.disconnect();
       speechNode?.disconnect();
+      volumeNode?.disconnect();
       compressorNode?.disconnect();
       gateNode?.disconnect();
       analyserNode?.disconnect();
-      volumeNode?.disconnect();
       mediaDest?.disconnect?.();
 
       if (micStream) {
@@ -978,10 +980,10 @@
       noiseCutNode = null;
       noiseLowpassNode = null;
       speechNode = null;
+      volumeNode = null;
       compressorNode = null;
       gateNode = null;
       analyserNode = null;
-      volumeNode = null;
       mediaDest = null;
       outputEl = null;
       meterFill.style.width = '0%';
