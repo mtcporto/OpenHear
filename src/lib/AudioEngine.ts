@@ -167,7 +167,7 @@ export class AudioEngine {
       .connect(this.nodes.gate)
       .connect(this.nodes.analyser);
 
-    // Saída
+    // Saída — tenta usar setSinkId para rotear para o headset correto
     const canSetSink = 'setSinkId' in HTMLAudioElement.prototype;
     if (canSetSink) {
       this.nodes.mediaDest = this.ctx.createMediaStreamDestination();
@@ -175,14 +175,21 @@ export class AudioEngine {
       this.outputEl = new Audio();
       this.outputEl.autoplay = true;
       this.outputEl.srcObject = this.nodes.mediaDest.stream;
+
+      // Resolve o outputDeviceId: se não foi fornecido, tenta casar com o input
+      let sinkId = s.outputDeviceId && s.outputDeviceId !== '' ? s.outputDeviceId : null;
+      if (!sinkId && s.inputDeviceId) {
+        sinkId = await AudioEngine.matchOutputForInput(s.inputDeviceId);
+      }
+
       try {
-        if (s.outputDeviceId && s.outputDeviceId !== 'default') {
-          await (this.outputEl as HTMLAudioElement & { setSinkId(id: string): Promise<void> }).setSinkId(
-            s.outputDeviceId
-          );
+        if (sinkId) {
+          await (this.outputEl as HTMLAudioElement & { setSinkId(id: string): Promise<void> }).setSinkId(sinkId);
         }
         await this.outputEl.play();
-      } catch {
+      } catch (err) {
+        console.warn('[AudioEngine] setSinkId falhou, usando saída padrão:', err);
+        try { this.outputEl.pause(); } catch { /* noop */ }
         this.outputEl.srcObject = null;
         this.outputEl = null;
         this.nodes.gate.connect(this.ctx.destination);
@@ -240,8 +247,12 @@ export class AudioEngine {
     if (p.noiseGate !== undefined && this.nodes.gate)
       this.nodes.gate.parameters.get('gateEnabled')?.setValueAtTime(p.noiseGate ? 1 : 0, t);
 
-    if (p.rnnoiseEnabled !== undefined && this.nodes.rnnoise)
-      this.nodes.rnnoise.port.postMessage({ type: 'enable', value: p.rnnoiseEnabled });
+    if (p.rnnoiseEnabled !== undefined && this.nodes.rnnoise) {
+      // Atualiza pendingEnabled caso o worklet ainda não esteja pronto
+      const n = this.nodes.rnnoise as AudioWorkletNode & { _setPendingEnabled?(v: boolean): void };
+      n._setPendingEnabled?.(p.rnnoiseEnabled);
+      n.port.postMessage({ type: 'enable', value: p.rnnoiseEnabled });
+    }
   }
 
   async calibrateGate(): Promise<number> {
@@ -279,6 +290,39 @@ export class AudioEngine {
     }
   }
 
+  /**
+   * Tenta encontrar o dispositivo de saída que corresponde ao mesmo
+   * hardware do input (ex: headset USB Logitech).
+   * Usa groupId quando disponível, senão tenta casar pelo label.
+   */
+  static async matchOutputForInput(inputDeviceId: string): Promise<string | null> {
+    try {
+      const list = await navigator.mediaDevices.enumerateDevices();
+      const input = list.find((d) => d.kind === 'audioinput' && d.deviceId === inputDeviceId);
+      if (!input) return null;
+
+      // 1. Tenta casar por groupId (mais confiável)
+      if (input.groupId) {
+        const byGroup = list.find(
+          (d) => d.kind === 'audiooutput' && d.groupId === input.groupId
+        );
+        if (byGroup) return byGroup.deviceId;
+      }
+
+      // 2. Fallback: casar por prefixo do label (ex: "Logitech H390")
+      if (input.label) {
+        const words = input.label.split(/[\s(]+/).filter((w) => w.length > 3);
+        const byLabel = list.find(
+          (d) =>
+            d.kind === 'audiooutput' &&
+            words.some((w) => d.label.toLowerCase().includes(w.toLowerCase()))
+        );
+        if (byLabel) return byLabel.deviceId;
+      }
+    } catch { /* noop */ }
+    return null;
+  }
+
   // ----- Internos -----
 
   private dBToGain(db: number): number {
@@ -300,19 +344,21 @@ export class AudioEngine {
       this.cb.onClip?.(false);
     }
 
-    // Feedback (microfonia)
-    if (rmsDb > -18) this.feedbackHold = 50;
+    // Feedback (microfonia) — limiar em -8 dB para evitar falso-positivo com headset
+    if (rmsDb > -8) this.feedbackHold = 50;
     else if (this.feedbackHold > 0) this.feedbackHold--;
     this.cb.onFeedback?.(this.feedbackHold > 0);
   }
 
   private startRNNoise(node: AudioWorkletNode, initialEnabled: boolean): void {
+    // Guarda o estado desejado — será enviado quando o worklet confirmar 'ready'
     let pendingEnabled = initialEnabled;
 
     node.port.onmessage = (e) => {
       if (!e.data) return;
       if (e.data.type === 'ready') {
         this.cb.onRNNoiseStatus?.('ready');
+        // Envia o estado inicial APÓS o worklet estar pronto
         node.port.postMessage({ type: 'enable', value: pendingEnabled });
       } else if (e.data.type === 'error') {
         console.warn('[RNNoise]', e.data.message);
@@ -320,33 +366,32 @@ export class AudioEngine {
       }
     };
 
-    // Sobrescreve postMessage enable para manter pendingEnabled sincronizado
-    const origPost = node.port.postMessage.bind(node.port);
-    node.port.postMessage = (msg: unknown, ...args: unknown[]) => {
-      if (msg && typeof msg === 'object' && (msg as { type: string }).type === 'enable') {
-        pendingEnabled = (msg as { type: string; value: boolean }).value;
-      }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (origPost as (...a: any[]) => void)(msg, ...args);
-    };
+    // Intercepta chamadas externas a enable para manter pendingEnabled atualizado
+    // caso updateSettings() seja chamado antes de 'ready'
+    const origUpdateSettings = this.updateSettings.bind(this);
+    void origUpdateSettings; // referência usada apenas para clareza
 
-    // Carrega WASM na main thread e envia como transferable —
-    // isso evita fetch() dentro do AudioWorklet (causa dos erros anteriores)
     this.cb.onRNNoiseStatus?.('loading');
+
+    // Faz fetch() na main thread, envia o binário como CÓPIA (não transferable)
+    // para evitar que o ArrayBuffer seja consumido (causa do erro anterior)
     fetch('/rnnoise/rnnoise.wasm')
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.arrayBuffer();
       })
-      .then((wasmBinary) => {
-        node.port.postMessage(
-          { type: 'load', jsUrl: '/rnnoise/rnnoise.js', wasmBinary },
-          [wasmBinary]
-        );
+      .then((buf) => {
+        // Copia o buffer — NÃO usa lista de transferables, seguro para reuso
+        const wasmBinary = buf.slice(0);
+        node.port.postMessage({ type: 'load', jsUrl: '/rnnoise/rnnoise.js', wasmBinary });
       })
       .catch((err) => {
         console.warn('[RNNoise] Falha ao carregar WASM:', err);
         this.cb.onRNNoiseStatus?.('error');
       });
+
+    // Expõe setter para que updateSettings() atualize pendingEnabled
+    (node as AudioWorkletNode & { _setPendingEnabled(v: boolean): void })._setPendingEnabled =
+      (v: boolean) => { pendingEnabled = v; };
   }
 }
