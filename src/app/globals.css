@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Range input — traz a cor de destaque */
+input[type='range'] {
+  accent-color: #0f6b5f;
+}
+
+/* Scrollbar fino no painel de configuracoes */
+.thin-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.thin-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.thin-scroll::-webkit-scrollbar-thumb {
+  background: #e1cbb1;
+  border-radius: 99px;
+}

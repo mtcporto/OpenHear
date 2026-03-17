@@ -354,6 +354,14 @@
         </div>
 
         <div class="row">
+          <label class="toggle" for="rnnoiseToggle">
+            <input id="rnnoiseToggle" type="checkbox" />
+            Supressao de ruido neural (RNNoise)
+          </label>
+          <span id="rnnoiseStatus" style="font-size:12px;color:var(--muted);">aguardando início</span>
+        </div>
+
+        <div class="row">
           <label class="toggle" for="noiseGate">
           <input id="noiseGate" type="checkbox" />
             Gate de ruido (abre quando ha fala)
@@ -431,9 +439,17 @@
     const volumeVal = document.getElementById('volumeVal');
     const speechVal = document.getElementById('speechVal');
 
+    // Arquivos locais do RNNoise (copiados de @jitsi/rnnoise-wasm)
+    const RNNOISE_JS_URL   = '/rnnoise-browser.js';
+    const RNNOISE_WASM_URL = '/rnnoise.wasm';
+
+    const rnnoiseToggle = document.getElementById('rnnoiseToggle');
+    const rnnoiseStatus = document.getElementById('rnnoiseStatus');
+
     let audioCtx = null;
     let micStream = null;
     let sourceNode = null;
+    let rnnoiseNode = null;   // RNNoise AudioWorkletNode
     let noiseCutNode = null;
     let noiseLowpassNode = null;
     let volumeNode = null;
@@ -826,6 +842,39 @@
       }
 
       sourceNode = audioCtx.createMediaStreamSource(micStream);
+
+      // --- RNNoise node ---
+      try {
+        await audioCtx.audioWorklet.addModule('rnnoise-processor.js');
+        rnnoiseNode = new AudioWorkletNode(audioCtx, 'rnnoise-processor', {
+          numberOfInputs: 1,
+          numberOfOutputs: 1,
+          outputChannelCount: [1]
+        });
+        rnnoiseNode.port.onmessage = (e) => {
+          if (!e.data) return;
+          if (e.data.type === 'ready') {
+            rnnoiseStatus.textContent = 'ativo';
+            rnnoiseStatus.style.color = '#22b07d';
+            // Sync enable state with checkbox
+            rnnoiseNode.port.postMessage({ type: 'enable', value: rnnoiseToggle.checked });
+          } else if (e.data.type === 'error') {
+            rnnoiseStatus.textContent = 'nao disponivel (WASM falhou)';
+            rnnoiseStatus.style.color = '#b3471f';
+            rnnoiseToggle.checked = false;
+            rnnoiseToggle.disabled = true;
+          }
+        };
+        // Inicia carregamento dos arquivos locais dentro do worklet
+        rnnoiseStatus.textContent = 'carregando modelo...';
+        rnnoiseNode.port.postMessage({ type: 'load', jsUrl: RNNOISE_JS_URL, wasmUrl: RNNOISE_WASM_URL });
+      } catch (err) {
+        console.warn('RNNoise AudioWorklet nao carregou:', err);
+        rnnoiseNode = null;
+        rnnoiseStatus.textContent = 'nao disponivel';
+        rnnoiseStatus.style.color = '#b3471f';
+      }
+
       const activeTrack = micStream.getAudioTracks()[0];
       if (activeTrack?.label) {
         micLabel.textContent = `Microfone ativo: ${activeTrack.label}`;
@@ -906,9 +955,15 @@
         mediaDest = audioCtx.createMediaStreamDestination();
       }
 
-      // Cadeia: source → highpass → lowpass → peaking → volume → compressor → gate
-      const chain = sourceNode
-        .connect(noiseCutNode)
+      // Cadeia: source → [rnnoise] → highpass → lowpass → peaking → volume → compressor → gate
+      const firstNode = rnnoiseNode || noiseCutNode;
+      if (rnnoiseNode) {
+        sourceNode.connect(rnnoiseNode);
+        rnnoiseNode.connect(noiseCutNode);
+      } else {
+        sourceNode.connect(noiseCutNode);
+      }
+      noiseCutNode
         .connect(noiseLowpassNode)
         .connect(speechNode)
         .connect(volumeNode)
@@ -953,6 +1008,8 @@
       if (!audioCtx) return;
 
       sourceNode?.disconnect();
+      rnnoiseNode?.disconnect();
+      if (rnnoiseNode?.port) rnnoiseNode.port.onmessage = null;
       noiseCutNode?.disconnect();
       noiseLowpassNode?.disconnect();
       speechNode?.disconnect();
@@ -983,9 +1040,13 @@
       volumeNode = null;
       compressorNode = null;
       gateNode = null;
+      rnnoiseNode = null;
       analyserNode = null;
       mediaDest = null;
       outputEl = null;
+      rnnoiseStatus.textContent = 'aguardando início';
+      rnnoiseStatus.style.color = '';
+      rnnoiseToggle.disabled = false;
       meterFill.style.width = '0%';
       meterDb.textContent = '-60 dB';
       clipFlag.classList.remove('active');
@@ -1037,6 +1098,11 @@
       if (audioCtx) alert('Pare e inicie novamente para aplicar a latencia.');
     });
     noiseGate.addEventListener('change', updateGateEnabled);
+    rnnoiseToggle.addEventListener('change', () => {
+      if (rnnoiseNode) {
+        rnnoiseNode.port.postMessage({ type: 'enable', value: rnnoiseToggle.checked });
+      }
+    });
     calibrateGate.addEventListener('click', () => {
       calibrateNoiseFloor().catch(() => {});
     });
