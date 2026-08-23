@@ -12,12 +12,12 @@
 export type RNNoiseStatus = 'idle' | 'loading' | 'ready' | 'error';
 
 export interface EngineSettings {
-  volume: number;           // ganho em dB
-  speech: number;           // EQ peaking em dB (3 kHz)
-  noiseCut: number;         // highpass em Hz
-  gateThreshold: number;    // limiar do gate em dB
+  volume: number;
+  speech: number;
+  noiseCut: number;
+  gateThreshold: number;
   noiseGate: boolean;
-  browserNoise: boolean;    // usar noiseSuppression/echoCancellation do browser
+  browserNoise: boolean;
   rnnoiseEnabled: boolean;
   lowLatency: boolean;
   inputDeviceId?: string;
@@ -29,12 +29,19 @@ export interface MeterData {
   peak: number;
 }
 
+export interface AudioDiagnostics {
+  sampleRate: number;
+  baseLatencyMs: number | null;
+  outputLatencyMs: number | null;
+}
+
 export interface EngineCallbacks {
   onMeter?(data: MeterData): void;
   onRNNoiseStatus?(status: RNNoiseStatus): void;
   onDeviceLabel?(label: string): void;
   onClip?(active: boolean): void;
   onFeedback?(active: boolean): void;
+  onDiagnostics?(diagnostics: AudioDiagnostics): void;
 }
 
 interface AudioNodes {
@@ -64,23 +71,34 @@ export class AudioEngine {
     this.cb = callbacks;
   }
 
-  // ----- Lifecycle ----
-
   async start(s: EngineSettings): Promise<void> {
     if (this.ctx) return;
 
+    // RNNoise expects 480-sample frames at 48 kHz. Asking the AudioContext
+    // to run at 48 kHz avoids feeding the model frames with the wrong time base.
+    // Browsers may still fall back to the device-native rate, so we expose the
+    // actual value through diagnostics below.
     this.ctx = new AudioContext({
       latencyHint: s.lowLatency ? 0.01 : 'interactive',
+      sampleRate: 48000,
     } as AudioContextOptions);
     await this.ctx.resume();
 
-    // Carrega worklets
+    const ctxWithOutputLatency = this.ctx as AudioContext & { outputLatency?: number };
+    this.cb.onDiagnostics?.({
+      sampleRate: this.ctx.sampleRate,
+      baseLatencyMs: Number.isFinite(this.ctx.baseLatency) ? this.ctx.baseLatency * 1000 : null,
+      outputLatencyMs:
+        typeof ctxWithOutputLatency.outputLatency === 'number'
+          ? ctxWithOutputLatency.outputLatency * 1000
+          : null,
+    });
+
     await Promise.all([
       this.ctx.audioWorklet.addModule('/worklets/gate-meter-processor.js'),
       this.ctx.audioWorklet.addModule('/worklets/rnnoise-processor.js'),
     ]);
 
-    // Captura de microfone via WebRTC getUserMedia
     const constraints: MediaTrackConstraints = {
       echoCancellation: s.browserNoise,
       noiseSuppression: s.browserNoise,
@@ -105,7 +123,6 @@ export class AudioEngine {
     const track = this.stream.getAudioTracks()[0];
     if (track?.label) this.cb.onDeviceLabel?.(track.label);
 
-    // Nodes
     this.nodes.source = this.ctx.createMediaStreamSource(this.stream);
 
     this.nodes.rnnoise = new AudioWorkletNode(this.ctx, 'rnnoise-processor', {
@@ -156,7 +173,6 @@ export class AudioEngine {
     this.nodes.analyser = this.ctx.createAnalyser();
     this.nodes.analyser.fftSize = 1024;
 
-    // Cadeia: source → rnnoise → highpass → lowpass → peaking → gain → compressor → gate → analyser
     this.nodes.source
       .connect(this.nodes.rnnoise)
       .connect(this.nodes.noiseCut)
@@ -167,7 +183,6 @@ export class AudioEngine {
       .connect(this.nodes.gate)
       .connect(this.nodes.analyser);
 
-    // Saída — tenta usar setSinkId para rotear para o headset correto
     const canSetSink = 'setSinkId' in HTMLAudioElement.prototype;
     if (canSetSink) {
       this.nodes.mediaDest = this.ctx.createMediaStreamDestination();
@@ -176,7 +191,6 @@ export class AudioEngine {
       this.outputEl.autoplay = true;
       this.outputEl.srcObject = this.nodes.mediaDest.stream;
 
-      // Resolve o outputDeviceId: se não foi fornecido, tenta casar com o input
       let sinkId = s.outputDeviceId && s.outputDeviceId !== '' ? s.outputDeviceId : null;
       if (!sinkId && s.inputDeviceId) {
         sinkId = await AudioEngine.matchOutputForInput(s.inputDeviceId);
@@ -226,8 +240,6 @@ export class AudioEngine {
     this.currentRmsDb = -60;
   }
 
-  // ----- Parâmetros em tempo real -----
-
   updateSettings(p: Partial<EngineSettings>): void {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
@@ -248,7 +260,6 @@ export class AudioEngine {
       this.nodes.gate.parameters.get('gateEnabled')?.setValueAtTime(p.noiseGate ? 1 : 0, t);
 
     if (p.rnnoiseEnabled !== undefined && this.nodes.rnnoise) {
-      // Atualiza pendingEnabled caso o worklet ainda não esteja pronto
       const n = this.nodes.rnnoise as AudioWorkletNode & { _setPendingEnabled?(v: boolean): void };
       n._setPendingEnabled?.(p.rnnoiseEnabled);
       n.port.postMessage({ type: 'enable', value: p.rnnoiseEnabled });
@@ -275,14 +286,12 @@ export class AudioEngine {
     return this.ctx !== null;
   }
 
-  // ----- Dispositivos -----
-
   static async enumerateDevices(): Promise<{ inputs: MediaDeviceInfo[]; outputs: MediaDeviceInfo[] }> {
     if (!navigator.mediaDevices?.enumerateDevices) return { inputs: [], outputs: [] };
     try {
       const list = await navigator.mediaDevices.enumerateDevices();
       return {
-        inputs:  list.filter((d) => d.kind === 'audioinput'),
+        inputs: list.filter((d) => d.kind === 'audioinput'),
         outputs: list.filter((d) => d.kind === 'audiooutput'),
       };
     } catch {
@@ -290,18 +299,12 @@ export class AudioEngine {
     }
   }
 
-  /**
-   * Tenta encontrar o dispositivo de saída que corresponde ao mesmo
-   * hardware do input (ex: headset USB Logitech).
-   * Usa groupId quando disponível, senão tenta casar pelo label.
-   */
   static async matchOutputForInput(inputDeviceId: string): Promise<string | null> {
     try {
       const list = await navigator.mediaDevices.enumerateDevices();
       const input = list.find((d) => d.kind === 'audioinput' && d.deviceId === inputDeviceId);
       if (!input) return null;
 
-      // 1. Tenta casar por groupId (mais confiável)
       if (input.groupId) {
         const byGroup = list.find(
           (d) => d.kind === 'audiooutput' && d.groupId === input.groupId
@@ -309,7 +312,6 @@ export class AudioEngine {
         if (byGroup) return byGroup.deviceId;
       }
 
-      // 2. Fallback: casar por prefixo do label (ex: "Logitech H390")
       if (input.label) {
         const words = input.label.split(/[\s(]+/).filter((w) => w.length > 3);
         const byLabel = list.find(
@@ -323,8 +325,6 @@ export class AudioEngine {
     return null;
   }
 
-  // ----- Internos -----
-
   private dBToGain(db: number): number {
     return Math.pow(10, db / 20);
   }
@@ -335,7 +335,6 @@ export class AudioEngine {
     this.currentRmsDb = rmsDb;
     this.cb.onMeter?.({ rmsDb, peak });
 
-    // Clip
     if (peak > 0.98) this.clipHold = 12;
     if (this.clipHold > 0) {
       this.clipHold--;
@@ -344,21 +343,18 @@ export class AudioEngine {
       this.cb.onClip?.(false);
     }
 
-    // Feedback (microfonia) — limiar em -8 dB para evitar falso-positivo com headset
     if (rmsDb > -8) this.feedbackHold = 50;
     else if (this.feedbackHold > 0) this.feedbackHold--;
     this.cb.onFeedback?.(this.feedbackHold > 0);
   }
 
   private startRNNoise(node: AudioWorkletNode, initialEnabled: boolean): void {
-    // Guarda o estado desejado — será enviado quando o worklet confirmar 'ready'
     let pendingEnabled = initialEnabled;
 
     node.port.onmessage = (e) => {
       if (!e.data) return;
       if (e.data.type === 'ready') {
         this.cb.onRNNoiseStatus?.('ready');
-        // Envia o estado inicial APÓS o worklet estar pronto
         node.port.postMessage({ type: 'enable', value: pendingEnabled });
       } else if (e.data.type === 'error') {
         console.warn('[RNNoise]', e.data.message);
@@ -366,22 +362,14 @@ export class AudioEngine {
       }
     };
 
-    // Intercepta chamadas externas a enable para manter pendingEnabled atualizado
-    // caso updateSettings() seja chamado antes de 'ready'
-    const origUpdateSettings = this.updateSettings.bind(this);
-    void origUpdateSettings; // referência usada apenas para clareza
-
     this.cb.onRNNoiseStatus?.('loading');
 
-    // Faz fetch() na main thread, envia o binário como CÓPIA (não transferable)
-    // para evitar que o ArrayBuffer seja consumido (causa do erro anterior)
     fetch('/rnnoise/rnnoise.wasm')
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.arrayBuffer();
       })
       .then((buf) => {
-        // Copia o buffer — NÃO usa lista de transferables, seguro para reuso
         const wasmBinary = buf.slice(0);
         node.port.postMessage({ type: 'load', jsUrl: '/rnnoise/rnnoise.js', wasmBinary });
       })
@@ -390,7 +378,6 @@ export class AudioEngine {
         this.cb.onRNNoiseStatus?.('error');
       });
 
-    // Expõe setter para que updateSettings() atualize pendingEnabled
     (node as AudioWorkletNode & { _setPendingEnabled(v: boolean): void })._setPendingEnabled =
       (v: boolean) => { pendingEnabled = v; };
   }
