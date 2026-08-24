@@ -487,4 +487,4 @@ run();
 }
 );
 })();
-(typeof globalThis !== "undefined" ? globalThis : self).createRNNWasmModule = createRNNWasmModule;
+export default createRNNWasmModule;

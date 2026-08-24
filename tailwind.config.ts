@@ -15,7 +15,7 @@ const config: Config = {
         border:  '#e1cbb1',
       },
       fontFamily: {
-        sans: ['"Space Grotesk"', '"IBM Plex Sans"', '"Segoe UI"', 'sans-serif'],
+        sans: ['ui-sans-serif', 'system-ui', '-apple-system', '"Segoe UI"', 'sans-serif'],
       },
     },
   },

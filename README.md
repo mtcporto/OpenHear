@@ -1,159 +1,95 @@
 # OpenHear
 
-Amplificador auditivo pessoal que roda inteiramente no navegador do smartphone. Conecte um headset comum, abra o app, e o microfone do fone captura o ambiente enquanto o processamento de áudio com IA entrega o som tratado diretamente no seu ouvido — funcionando de forma semelhante a um aparelho auditivo, mas sem hardware dedicado.
+Aplicação web experimental para escuta assistida e diagnóstico de áudio em tempo real. O microfone é processado localmente com Web Audio, AudioWorklet e RNNoise/WASM; o áudio não é enviado a um servidor.
 
----
+> O OpenHear não é um dispositivo médico, não mede nível de pressão sonora no ouvido e não substitui avaliação audiológica. Comece sempre com o volume do aparelho e do fone baixos.
 
-## Como funciona
+## Modos de diagnóstico
 
-```
-Microfone (headset)
-       │
-       ▼
-  RNNoise WASM          ← supressão de ruído neural
-       │
-       ▼
-  Highpass Filter       ← corte de graves (ruído de baixa frequência)
-       │
-       ▼
-  Lowpass Filter        ← corte de agudos excessivos
-       │
-       ▼
-  Peaking EQ (3 kHz)    ← ênfase de fala para maior clareza
-       │
-       ▼
-  Gain                  ← volume geral ajustável
-       │
-       ▼
-  DynamicsCompressor    ← compressão suave para proteger o ouvido
-       │
-       ▼
-  Noise Gate            ← abre apenas quando há fala, fecha no silêncio
-       │
-       ▼
-  Saída (headset)
+Os modos permitem descobrir em qual etapa a qualidade se perde:
+
+| Modo | Caminho de áudio | Uso principal |
+|---|---|---|
+| **A · RAW** | microfone → limiter de segurança → saída | referência do hardware e do roteamento |
+| **B · GAIN** | RAW + ganho | testar amplificação sem DSP |
+| **C · DSP** | ganho + filtros + EQ + compressor moderado | melhorar inteligibilidade |
+| **D · FULL** | DSP + RNNoise e gate opcionais | testar redução adicional de ruído |
+
+O limiter evita picos digitais, mas não garante um volume acusticamente seguro. RNNoise e gate começam desligados no preset de referência. O gate ganhou retenção e histerese, mas ainda deve permanecer desligado se cortar o início ou o fim das palavras.
+
+## Pipeline
+
+```text
+microfone → medidor bruto ─┬→ RAW ───────────────────────────┐
+                          ├→ ganho → GAIN ──────────────────┤
+                          ├→ filtros → EQ → ganho → comp. → DSP ─┤
+                          └→ RNNoise? → filtros → EQ → ganho → comp. → gate? → FULL
+                                                                      │
+                                      limiter → fade → analyser → saída
 ```
 
-Todo o processamento acontece **localmente no dispositivo**, sem enviar áudio para nenhum servidor.
+- O contexto solicita 48 kHz, formato esperado pelo RNNoise, e mostra a taxa realmente obtida.
+- A saída padrão liga diretamente ao `AudioContext.destination`; `setSinkId` só é usado quando o usuário escolhe uma saída explícita.
+- O painel de diagnóstico mostra canais, taxas, latências informadas pelo navegador, processamento nativo e rota de saída.
+- A troca entre os quatro modos usa crossfade curto para reduzir estalos.
 
----
+## Requisitos e execução
 
-## Funcionalidades
-
-- **Supressão neural de ruído (RNNoise)** — modelo de deep learning compilado em WebAssembly, mesmo algoritmo usado como base para ferramentas como Krisp
-- **Gate de ruído calibrável** — mede o ruído ambiente e ajusta o limiar automaticamente
-- **EQ de fala** — ênfase na faixa 2–4 kHz onde a inteligibilidade da fala é maior
-- **Seleção de dispositivo** — detecta headsets automaticamente e roteia entrada e saída para o mesmo hardware
-- **Presets** — perfis pré-definidos (Padrão, Fala clara, Ambiente ruidoso, Música) e suporte a presets personalizados salvos localmente
-- **Waveform em tempo real** — visualizador de forma de onda e medidor de nível (dB)
-- **PWA-ready** — manifest configurado para instalação como app no Android
-- **Mobile-first** — interface projetada para uso com uma mão no smartphone
-
----
-
-## Tecnologias
-
-### Framework e linguagem
-
-| Tecnologia | Uso |
-|---|---|
-| [Next.js 15](https://nextjs.org/) | Framework React com App Router, build otimizado, deploy Vercel nativo |
-| [React 19](https://react.dev/) | Interface declarativa com hooks para estado de áudio em tempo real |
-| [TypeScript 5](https://www.typescriptlang.org/) | Tipagem estática em todo o código da aplicação |
-| [Tailwind CSS 3](https://tailwindcss.com/) | Estilos utilitários, mobile-first |
-
-### Áudio e processamento
-
-| Tecnologia | Uso |
-|---|---|
-| **Web Audio API** | Grafo de nós de áudio (filtros, gain, compressor, analyser) |
-| **AudioWorklet** | Processamento de áudio em thread dedicada com latência mínima |
-| **WebRTC `getUserMedia`** | Captura do microfone com controle de dispositivo, eco e ruído |
-| **RNNoise** ([@jitsi/rnnoise-wasm](https://github.com/jitsi/rnnoise-wasm)) | Modelo RNN de supressão de ruído compilado em WASM — roda offline no browser |
-| **WebAssembly** | Executa o modelo RNNoise em velocidade nativa dentro do AudioWorklet |
-| **`setSinkId` API** | Roteamento da saída de áudio para o headset correto |
-
-### Deploy e infraestrutura
-
-| Tecnologia | Uso |
-|---|---|
-| [Vercel](https://vercel.com/) | Deploy com zero configuração — `vercel` na raiz do projeto |
-| **HTTPS automático** | Obrigatório para `getUserMedia` em dispositivos móveis |
-
----
-
-## Estrutura do projeto
-
-```
-OpenHear/
-├── src/
-│   ├── app/
-│   │   ├── layout.tsx        # layout raiz, metadados, PWA
-│   │   ├── page.tsx          # rota /
-│   │   └── globals.css       # Tailwind base + customizações
-│   ├── components/
-│   │   ├── AudioApp.tsx      # componente principal — UI completa
-│   │   └── Waveform.tsx      # canvas animado com Web Audio AnalyserNode
-│   ├── hooks/
-│   │   └── useAudioEngine.ts # hook React que gerencia o ciclo de vida do engine
-│   └── lib/
-│       ├── AudioEngine.ts    # motor de áudio — grafo, worklets, dispositivos
-│       └── presets.ts        # definição e persistência de presets (localStorage)
-│
-├── public/
-│   ├── worklets/
-│   │   ├── gate-meter-processor.js   # AudioWorklet: gate + medidor RMS
-│   │   └── rnnoise-processor.js      # AudioWorklet: supressão RNNoise WASM
-│   ├── rnnoise/
-│   │   ├── rnnoise.js        # Emscripten glue (patchado para importScripts)
-│   │   └── rnnoise.wasm      # modelo binário compilado
-│   └── manifest.json         # PWA manifest
-│
-├── scripts/
-│   └── setup-rnnoise.js      # copia e patcha @jitsi/rnnoise-wasm → public/rnnoise/
-│
-├── next.config.ts
-├── tailwind.config.ts
-└── tsconfig.json
-```
-
----
-
-## Rodando localmente
+- Node.js 20.9 ou superior
+- Navegador com `getUserMedia`, Web Audio, AudioWorklet e WebAssembly
+- `https://` em celulares; `http://localhost` é aceito para desenvolvimento no próprio computador
 
 ```bash
-npm install        # instala dependências e copia automaticamente os arquivos RNNoise
-npx next dev       # inicia em http://localhost:3000
+npm install
+npm run dev
 ```
 
-> O `postinstall` roda `scripts/setup-rnnoise.js` automaticamente — não é necessário nenhum passo manual para o RNNoise.
+Abra `http://localhost:3000`. O `postinstall` copia o módulo ES e o WASM de `@jitsi/rnnoise-wasm` para `public/rnnoise/`.
 
-**Requisito:** a página precisa ser servida via `http://localhost` ou `https://` para que `getUserMedia` e `AudioWorklet` funcionem. Não abre direto como `file://`.
+Para verificar o projeto:
 
----
+```bash
+npm run check
+```
 
-## Deploy na Vercel
+O comando executa ESLint, TypeScript e o build de produção.
+
+### Teste em um celular
+
+Um endereço como `http://192.168.x.x:3000` normalmente **não** é contexto seguro para microfone. Use um deploy HTTPS ou um túnel HTTPS durante o desenvolvimento.
+
+1. Conecte o fone antes de abrir o app.
+2. Comece em **A · RAW**, com volume baixo.
+3. Compare o microfone interno com o microfone do fone.
+4. Compare Bluetooth com um fone com fio ou USB-C, se possível.
+5. Avance para GAIN, DSP e FULL, uma etapa por vez.
+
+Ao usar simultaneamente o microfone e a saída de um headset Bluetooth, muitos celulares mudam de A2DP para o perfil de chamada HFP/HSP. Esse perfil tem menor largura de banda e pode soar abafado ou metálico; nesse caso, a limitação é do conjunto telefone/Bluetooth, não necessariamente do DSP.
+
+## Estrutura
+
+```text
+src/
+  app/                  rota, layout e estilos
+  components/           interface e visualizador
+  hooks/                ciclo de vida React do motor
+  lib/AudioEngine.ts    grafo, dispositivos e diagnóstico
+  lib/presets.ts        presets e migração do localStorage
+public/
+  worklets/             medidor/gate e RNNoise
+  rnnoise/              glue ES module e WASM
+scripts/setup-rnnoise.js
+```
+
+A implementação antiga em HTML/JS na raiz foi removida. `src/` é agora a única aplicação executável, e artefatos `.next/` não ficam versionados.
+
+## Deploy
+
+Qualquer hospedagem compatível com Next.js e HTTPS funciona. Na Vercel, por exemplo:
 
 ```bash
 npx vercel
 ```
-
-O Next.js é suportado nativamente. O HTTPS é provisionado automaticamente, o que é obrigatório para captura de microfone em browsers mobile.
-
-Para acessar do Android durante desenvolvimento local, use o endereço de rede exibido pelo `next dev` (ex: `http://192.168.x.x:3000`) na mesma rede Wi-Fi — o Chrome permite `getUserMedia` em IPs locais sem HTTPS.
-
----
-
-## Como usar no smartphone
-
-1. Acesse o endereço do app no Chrome para Android
-2. Conecte o headset USB ou Bluetooth **antes** de abrir o app
-3. Toque em **Iniciar escuta**
-4. O app detecta e seleciona automaticamente o headset como entrada e saída
-5. Ajuste o **Volume** e a **Clareza de fala** conforme necessário
-6. Para ambientes ruidosos, ative o **Gate de ruído** e use **Calibrar ruído ambiente**
-
----
 
 ## Licença
 

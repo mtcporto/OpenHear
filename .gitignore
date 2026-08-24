@@ -1,1 +1,9 @@
 node_modules
+.next
+out
+coverage
+*.tsbuildinfo
+
+# Local environment files
+.env*
+!.env.example

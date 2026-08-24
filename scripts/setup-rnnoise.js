@@ -1,6 +1,7 @@
 /**
- * Copia os arquivos do @jitsi/rnnoise-wasm para public/rnnoise/
- * e patcha o rnnoise.js para funcionar com importScripts no AudioWorklet.
+ * Copia os arquivos ES module do @jitsi/rnnoise-wasm para public/rnnoise/.
+ * O AudioWorklet importa o factory diretamente como modulo; importScripts nao
+ * existe em AudioWorkletGlobalScope.
  *
  * Uso: node scripts/setup-rnnoise.js
  * Roda automaticamente via postinstall.
@@ -15,22 +16,10 @@ fs.mkdirSync(dest, { recursive: true });
 
 // 1. Copiar rnnoise.wasm sem modificacao
 fs.copyFileSync(path.join(src, 'rnnoise.wasm'), path.join(dest, 'rnnoise.wasm'));
+fs.chmodSync(path.join(dest, 'rnnoise.wasm'), 0o644);
 
-// 2. Patchar rnnoise.js: trocar "export default" por globalThis assignment
-//    O AudioWorklet classico nao suporta ES modules, mas suporta importScripts.
-let js = fs.readFileSync(path.join(src, 'rnnoise.js'), 'utf8');
+// 2. Copiar o glue Emscripten sem alterar o export ES module.
+fs.copyFileSync(path.join(src, 'rnnoise.js'), path.join(dest, 'rnnoise.js'));
+fs.chmodSync(path.join(dest, 'rnnoise.js'), 0o644);
 
-if (!js.includes('export default createRNNWasmModule')) {
-  console.error('AVISO: padrao de export nao encontrado em rnnoise.js. Verifique a versao do pacote.');
-  process.exit(1);
-}
-
-js = js.replace(
-  'export default createRNNWasmModule;',
-  // Funciona tanto em AudioWorkletGlobalScope (self) quanto em globalThis
-  '(typeof globalThis !== "undefined" ? globalThis : self).createRNNWasmModule = createRNNWasmModule;'
-);
-
-fs.writeFileSync(path.join(dest, 'rnnoise.js'), js, 'utf8');
-
-console.log('✓ RNNoise: rnnoise.wasm e rnnoise.js copiados para public/rnnoise/');
+console.log('✓ RNNoise: modulo ES e WASM copiados para public/rnnoise/');

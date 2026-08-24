@@ -16,8 +16,10 @@ export default function Waveform({ analyserNode }: WaveformProps) {
     if (!canvas) return;
     const ro = new ResizeObserver((entries) => {
       for (const e of entries) {
-        canvas.width  = Math.floor(e.contentRect.width);
-        canvas.height = Math.floor(e.contentRect.height);
+        const pixelRatio = window.devicePixelRatio || 1;
+        canvas.width = Math.max(1, Math.floor(e.contentRect.width * pixelRatio));
+        canvas.height = Math.max(1, Math.floor(e.contentRect.height * pixelRatio));
+        canvas.getContext('2d')?.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
       }
     });
     ro.observe(canvas);
@@ -35,7 +37,8 @@ export default function Waveform({ analyserNode }: WaveformProps) {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
       ctx.fillStyle = '#efe0c9';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const pixelRatio = window.devicePixelRatio || 1;
+      ctx.fillRect(0, 0, canvas.width / pixelRatio, canvas.height / pixelRatio);
       return;
     }
 
@@ -45,8 +48,9 @@ export default function Waveform({ analyserNode }: WaveformProps) {
       rafRef.current = requestAnimationFrame(draw);
       analyserNode.getByteTimeDomainData(data);
 
-      const w = canvas.width  || 1;
-      const h = canvas.height || 1;
+      const pixelRatio = window.devicePixelRatio || 1;
+      const w = canvas.width / pixelRatio || 1;
+      const h = canvas.height / pixelRatio || 1;
       ctx.fillStyle = '#efe0c9';
       ctx.fillRect(0, 0, w, h);
 
@@ -76,6 +80,8 @@ export default function Waveform({ analyserNode }: WaveformProps) {
   return (
     <canvas
       ref={canvasRef}
+      role="img"
+      aria-label="Forma de onda do áudio processado em tempo real"
       className="w-full h-28 rounded-xl"
       style={{ background: '#efe0c9' }}
     />
