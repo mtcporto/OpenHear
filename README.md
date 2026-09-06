@@ -67,7 +67,7 @@ Ao usar simultaneamente o microfone e a saída de um headset Bluetooth, muitos c
 
 ### APK Android via Capacitor
 
-O projeto também possui uma camada Android via Capacitor. No APK, o hook seleciona o plugin `NativeAudio`; no navegador, continua usando o backend Web Audio. O backend nativo usa `AudioRecord` → DSP → `AudioTrack`, rota de comunicação de baixa latência, seleção de headset e cancelamento acústico de eco quando o aparelho oferece esse recurso.
+O projeto também possui uma camada Android via Capacitor. No APK, o hook seleciona o plugin `NativeAudio`; no navegador, continua usando o backend Web Audio. O backend nativo usa `AudioRecord` → DSP → `AudioTrack`, com caminho de baixa latência e captura `VOICE_RECOGNITION`, priorizando áudio limpo. O roteamento final depende do Android e do headset conectado.
 
 Quando a escuta está ativa, o Android mantém um serviço em primeiro plano e um `WakeLock` parcial. Isso permite que o áudio continue funcionando com a tela apagada; uma notificação persistente indica que a escuta está ativa.
 

@@ -4,12 +4,10 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.media.AudioAttributes;
-import android.media.AudioDeviceInfo;
 import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioRecord;
 import android.media.AudioTrack;
-import android.media.audiofx.AcousticEchoCanceler;
 import android.os.Build;
 
 import androidx.core.content.ContextCompat;
@@ -39,7 +37,6 @@ public class NativeAudioPlugin extends Plugin {
     private AudioRecord recorder;
     private AudioTrack player;
     private AudioManager audioManager;
-    private AcousticEchoCanceler echoCanceler;
     private int bufferSize;
     private long lastMeterNanos;
     private String processingMode = "dsp";
@@ -96,7 +93,7 @@ public class NativeAudioPlugin extends Plugin {
             audioManager = (AudioManager) getContext().getSystemService(android.content.Context.AUDIO_SERVICE);
             if (audioManager != null) audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
             recorder = new AudioRecord(
-                    android.media.MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+                    android.media.MediaRecorder.AudioSource.VOICE_RECOGNITION,
                     SAMPLE_RATE,
                     CHANNEL_MASK,
                     ENCODING,
@@ -105,7 +102,7 @@ public class NativeAudioPlugin extends Plugin {
 
             AudioTrack.Builder trackBuilder = new AudioTrack.Builder()
                     .setAudioAttributes(new AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
                             .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                             .build())
                     .setAudioFormat(new AudioFormat.Builder()
@@ -119,12 +116,6 @@ public class NativeAudioPlugin extends Plugin {
                 trackBuilder.setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY);
             }
             player = trackBuilder.build();
-            selectCommunicationDevices();
-            if (AcousticEchoCanceler.isAvailable()) {
-                echoCanceler = AcousticEchoCanceler.create(recorder.getAudioSessionId());
-                if (echoCanceler != null) echoCanceler.setEnabled(true);
-            }
-
             recorder.startRecording();
             player.play();
             running = true;
@@ -240,11 +231,6 @@ public class NativeAudioPlugin extends Plugin {
             player.release();
             player = null;
         }
-        if (echoCanceler != null) {
-            echoCanceler.setEnabled(false);
-            echoCanceler.release();
-            echoCanceler = null;
-        }
         stopAudioForegroundService();
         if (audioManager != null) {
             audioManager.setMode(AudioManager.MODE_NORMAL);
@@ -267,35 +253,6 @@ public class NativeAudioPlugin extends Plugin {
 
     private void stopAudioForegroundService() {
         getContext().stopService(new Intent(getContext(), AudioForegroundService.class));
-    }
-
-    private void selectCommunicationDevices() {
-        if (audioManager == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return;
-        AudioDeviceInfo preferredInput = null;
-        AudioDeviceInfo preferredOutput = null;
-        for (AudioDeviceInfo device : audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)) {
-            if (isPreferredHeadsetType(device.getType())) {
-                preferredInput = device;
-                break;
-            }
-        }
-        for (AudioDeviceInfo device : audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)) {
-            if (isPreferredHeadsetType(device.getType())) {
-                preferredOutput = device;
-                break;
-            }
-        }
-        if (preferredInput != null && recorder != null) recorder.setPreferredDevice(preferredInput);
-        if (preferredOutput != null && player != null) player.setPreferredDevice(preferredOutput);
-    }
-
-    private boolean isPreferredHeadsetType(int type) {
-        return type == AudioDeviceInfo.TYPE_WIRED_HEADSET
-                || type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES
-                || type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
-                || type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP
-                || type == AudioDeviceInfo.TYPE_USB_HEADSET
-                || type == AudioDeviceInfo.TYPE_USB_DEVICE;
     }
 
     @Override
