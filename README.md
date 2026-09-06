@@ -4,6 +4,14 @@ Aplicação web experimental para escuta assistida e diagnóstico de áudio em t
 
 > O OpenHear não é um dispositivo médico, não mede nível de pressão sonora no ouvido e não substitui avaliação audiológica. Comece sempre com o volume do aparelho e do fone baixos.
 
+## Estado atual do teste Android
+
+O APK usa o backend nativo via Capacitor. Nos testes atuais, a escuta continua funcionando quando a tela é apagada, graças ao serviço Android em primeiro plano e ao `WakeLock` parcial.
+
+A tentativa de usar cancelamento acústico de eco e o perfil de comunicação do Android foi revertida: em alguns aparelhos ela introduziu cracks, chiados e ruído. A configuração atual prioriza áudio limpo e ainda precisa ser avaliada com diferentes telefones e headsets.
+
+A identificação ou redução automática da voz da própria pessoa ainda não foi implementada. Esse recurso só será considerado depois dos testes básicos, porque pode remover vozes importantes e não elimina a voz percebida por condução óssea.
+
 ## Modos de diagnóstico
 
 Os modos permitem descobrir em qual etapa a qualidade se perde:
