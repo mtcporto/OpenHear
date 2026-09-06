@@ -180,9 +180,9 @@ public class NativeAudioPlugin extends Plugin {
     private synchronized void applySettings(JSObject settings) {
         if (settings == null) return;
         processingMode = settings.getString("processingMode", processingMode);
-        volumeDb = (float) settings.getDouble("volume", (double) volumeDb);
-        speech = (float) settings.getDouble("speech", (double) speech);
-        noiseCut = (float) settings.getDouble("noiseCut", (double) noiseCut);
+        volumeDb = (float) settings.optDouble("volume", volumeDb);
+        speech = (float) settings.optDouble("speech", speech);
+        noiseCut = (float) settings.optDouble("noiseCut", noiseCut);
         volumeDb = Math.max(-6f, Math.min(18f, volumeDb));
         speech = Math.max(0f, Math.min(9f, speech));
         noiseCut = Math.max(60f, Math.min(200f, noiseCut));
