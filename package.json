@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "next dev --port 3000",
     "build": "next build",
+    "cap:sync": "npm run build && cap sync",
+    "cap:android": "npm run cap:sync && cap open android",
     "start": "next start --port 3000",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
@@ -12,12 +14,15 @@
     "postinstall": "node scripts/setup-rnnoise.js"
   },
   "dependencies": {
+    "@capacitor/android": "^5.7.8",
+    "@capacitor/core": "^5.7.8",
     "@jitsi/rnnoise-wasm": "^0.2.1",
     "next": "16.3.2",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@capacitor/cli": "^5.7.8",
     "@types/node": "^22",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",

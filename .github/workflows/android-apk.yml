@@ -1,0 +1,66 @@
+name: Build OpenHear Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install JavaScript dependencies
+        run: npm ci
+
+      - name: Build web assets and sync Capacitor
+        run: npm run cap:sync
+
+      - name: Build debug APK
+        working-directory: android
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug --no-daemon --stacktrace --info 2>&1 | tee ../gradle-build.log
+
+      - name: Collect APK
+        run: |
+          find android -type f -name '*.apk' -print
+          apk_path="$(find android -type f -name '*.apk' | head -n 1)"
+          test -n "$apk_path"
+          cp "$apk_path" openhear-debug.apk
+
+      - name: Upload Gradle build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openhear-gradle-build-log
+          path: gradle-build.log
+          if-no-files-found: warn
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: openhear-debug-apk
+          path: openhear-debug.apk
+          if-no-files-found: error

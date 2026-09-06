@@ -15,5 +15,6 @@ export default defineConfig([
     '.next/**',
     'node_modules/**',
     'public/rnnoise/**',
+    'android/app/src/main/assets/**',
   ]),
 ]);

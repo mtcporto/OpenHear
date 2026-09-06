@@ -66,6 +66,19 @@ Um endereço como `http://192.168.x.x:3000` normalmente **não** é contexto seg
 
 Ao usar simultaneamente o microfone e a saída de um headset Bluetooth, muitos celulares mudam de A2DP para o perfil de chamada HFP/HSP. Esse perfil tem menor largura de banda e pode soar abafado ou metálico; nesse caso, a limitação é do conjunto telefone/Bluetooth, não necessariamente do DSP.
 
+### APK Android via Capacitor
+
+O projeto também possui uma primeira camada Android via Capacitor. No APK, o hook seleciona o plugin `NativeAudio`; no navegador, continua usando o backend Web Audio. O backend nativo atual é um passthrough experimental (`AudioRecord` → `AudioTrack`) com caminho de baixa latência e medidor, criado para medir a diferença antes da migração do DSP.
+
+```bash
+npm run cap:sync
+npx cap open android
+```
+
+O áudio ainda não deve ser considerado um aparelho auditivo: o plugin nativo não implementa ganho, filtros, compressor, gate ou limiter. Essas etapas serão migradas para o motor nativo somente depois de validar captura, saída, roteamento e latência em aparelhos reais.
+
+O APK debug também é gerado automaticamente pelo GitHub Actions a cada push em `main`. Para gerar manualmente, abra **Actions → Build OpenHear Android APK → Run workflow** e baixe o artifact `openhear-debug-apk` ao final.
+
 ## Estrutura
 
 ```text

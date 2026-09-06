@@ -9,11 +9,14 @@ import {
   type MeterData,
   type RNNoiseStatus,
 } from '@/lib/AudioEngine';
+import { isNativeAudioAvailable, NativeAudio, type NativeAudioDiagnostics } from '@/lib/nativeAudio';
 
 const EMPTY_METER: MeterData = { rmsDb: -96, peak: 0 };
 
 export function useAudioEngine() {
   const engineRef = useRef<AudioEngine | null>(null);
+  const nativeListenersRef = useRef<Array<{ remove: () => Promise<void> }>>([]);
+  const nativeActiveRef = useRef(false);
   const lastMeterPaintRef = useRef(0);
 
   const [sessionState, setSessionState] = useState<AudioSessionState>('idle');
@@ -69,6 +72,37 @@ export function useAudioEngine() {
     setWarning('');
     setDiagnostics(null);
 
+    if (isNativeAudioAvailable()) {
+      setSessionState('starting');
+      try {
+        await NativeAudio.requestPermission();
+        nativeListenersRef.current = await Promise.all([
+          NativeAudio.addListener('meter', (data) => {
+            if (typeof data.rmsDb === 'number' && typeof data.peak === 'number')
+              paintMeter({ rmsDb: data.rmsDb, peak: data.peak });
+            if (typeof data.peak === 'number') setClipActive(data.peak > 0.98);
+          }),
+          NativeAudio.addListener('state', (data) => {
+            if (data.state === 'running') setSessionState('running');
+            if (data.state === 'idle') setSessionState('idle');
+          }),
+          NativeAudio.addListener('warning', (data) => {
+            if (typeof data.message === 'string') setWarning(data.message);
+          }),
+        ]);
+        const nativeDiagnostics = await NativeAudio.start({ settings });
+        setDiagnostics(toAudioDiagnostics(nativeDiagnostics, settings));
+        nativeActiveRef.current = true;
+        return;
+      } catch (caught) {
+        await Promise.all(nativeListenersRef.current.map((listener) => listener.remove()));
+        nativeListenersRef.current = [];
+        setSessionState('error');
+        setError(AudioEngine.describeError(caught));
+        throw caught;
+      }
+    }
+
     const engine = new AudioEngine({
       onMeter: paintMeter,
       onRNNoiseStatus: setRnnoiseStatus,
@@ -103,6 +137,17 @@ export function useAudioEngine() {
   }, [loadDevices, paintMeter]);
 
   const stop = useCallback(async () => {
+    if (nativeActiveRef.current) {
+      nativeActiveRef.current = false;
+      await NativeAudio.stop();
+      await Promise.all(nativeListenersRef.current.map((listener) => listener.remove()));
+      nativeListenersRef.current = [];
+      setSessionState('idle');
+      setMeterData(EMPTY_METER);
+      setClipActive(false);
+      setDiagnostics(null);
+      return;
+    }
     const engine = engineRef.current;
     engineRef.current = null;
     await engine?.stop();
@@ -115,6 +160,7 @@ export function useAudioEngine() {
   }, []);
 
   const resume = useCallback(async () => {
+    if (nativeActiveRef.current) return;
     try {
       await engineRef.current?.resume();
     } catch (caught) {
@@ -123,6 +169,10 @@ export function useAudioEngine() {
   }, []);
 
   const updateSettings = useCallback((partial: Partial<EngineSettings>) => {
+    if (nativeActiveRef.current) {
+      void NativeAudio.updateSettings({ settings: partial });
+      return;
+    }
     engineRef.current?.updateSettings(partial);
   }, []);
 
@@ -141,6 +191,10 @@ export function useAudioEngine() {
       const engine = engineRef.current;
       engineRef.current = null;
       void engine?.stop(false);
+      if (nativeActiveRef.current) {
+        nativeActiveRef.current = false;
+        void NativeAudio.stop();
+      }
     };
   }, [loadDevices]);
 
@@ -167,5 +221,26 @@ export function useAudioEngine() {
     calibrateGate,
     loadDevices,
     refreshDevices,
+  };
+}
+
+function toAudioDiagnostics(native: NativeAudioDiagnostics, settings: EngineSettings): AudioDiagnostics {
+  return {
+    contextSampleRate: native.outputSampleRate,
+    inputSampleRate: native.inputSampleRate,
+    inputChannelCount: native.inputChannelCount,
+    inputLatencyMs: (native.bufferSize / native.inputSampleRate) * 1000,
+    baseLatencyMs: null,
+    outputLatencyMs: (native.bufferSize / native.outputSampleRate) * 1000,
+    inputDeviceId: null,
+    inputDeviceLabel: native.inputDeviceLabel,
+    inputFallback: false,
+    outputDeviceId: null,
+    outputRoute: 'fallback',
+    echoCancellation: null,
+    noiseSuppression: null,
+    autoGainControl: null,
+    processingMode: settings.processingMode,
+    secureContext: true,
   };
 }
