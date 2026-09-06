@@ -64,7 +64,7 @@ public class NativeAudioPlugin extends Plugin {
 
     @PermissionCallback
     private void microphonePermissionCallback(PluginCall call) {
-        if (hasPermission("microphone")) {
+        if (hasPermission(Manifest.permission.RECORD_AUDIO)) {
             call.resolve();
         } else {
             call.reject("Permissão de microfone negada");
@@ -73,7 +73,7 @@ public class NativeAudioPlugin extends Plugin {
 
     @PluginMethod
     public synchronized void start(PluginCall call) {
-        if (!hasPermission("microphone")) {
+        if (!hasPermission(Manifest.permission.RECORD_AUDIO)) {
             call.reject("Permissão de microfone necessária");
             return;
         }
