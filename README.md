@@ -59,23 +59,24 @@ O comando executa ESLint, TypeScript e o build de produção.
 Um endereço como `http://192.168.x.x:3000` normalmente **não** é contexto seguro para microfone. Use um deploy HTTPS ou um túnel HTTPS durante o desenvolvimento.
 
 1. Conecte o fone antes de abrir o app.
-2. Comece em **A · RAW**, com volume baixo.
+2. Comece pelo modo **Equilibrado**, com volume baixo.
 3. Compare o microfone interno com o microfone do fone.
 4. Compare Bluetooth com um fone com fio ou USB-C, se possível.
-5. Avance para GAIN, DSP e FULL, uma etapa por vez.
 
 Ao usar simultaneamente o microfone e a saída de um headset Bluetooth, muitos celulares mudam de A2DP para o perfil de chamada HFP/HSP. Esse perfil tem menor largura de banda e pode soar abafado ou metálico; nesse caso, a limitação é do conjunto telefone/Bluetooth, não necessariamente do DSP.
 
 ### APK Android via Capacitor
 
-O projeto também possui uma primeira camada Android via Capacitor. No APK, o hook seleciona o plugin `NativeAudio`; no navegador, continua usando o backend Web Audio. O backend nativo atual é um passthrough experimental (`AudioRecord` → `AudioTrack`) com caminho de baixa latência e medidor, criado para medir a diferença antes da migração do DSP.
+O projeto também possui uma camada Android via Capacitor. No APK, o hook seleciona o plugin `NativeAudio`; no navegador, continua usando o backend Web Audio. O backend nativo usa `AudioRecord` → DSP → `AudioTrack`, rota de comunicação de baixa latência, seleção de headset e cancelamento acústico de eco quando o aparelho oferece esse recurso.
+
+Quando a escuta está ativa, o Android mantém um serviço em primeiro plano e um `WakeLock` parcial. Isso permite que o áudio continue funcionando com a tela apagada; uma notificação persistente indica que a escuta está ativa.
 
 ```bash
 npm run cap:sync
 npx cap open android
 ```
 
-O áudio ainda não deve ser considerado um aparelho auditivo: o plugin nativo não implementa ganho, filtros, compressor, gate ou limiter. Essas etapas serão migradas para o motor nativo somente depois de validar captura, saída, roteamento e latência em aparelhos reais.
+O áudio ainda não deve ser considerado um aparelho auditivo: o processamento nativo atual é uma primeira versão experimental de ganho, filtro simples e limiter. O comportamento precisa ser validado em aparelhos reais, principalmente com diferentes headsets e níveis de volume.
 
 O APK debug também é gerado automaticamente pelo GitHub Actions a cada push em `main`. Para gerar manualmente, abra **Actions → Build OpenHear Android APK → Run workflow** e baixe o artifact `openhear-debug-apk` ao final.
 
