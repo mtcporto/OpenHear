@@ -1,10 +1,10 @@
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const fs = require('node:fs/promises');
-const os = require('node:os');
-const path = require('node:path');
-const tar = require('tar');
-const { extractTemplate } = require('@capacitor/cli/dist/util/template');
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import * as tar from 'tar';
+import { extractTemplate } from '@capacitor/cli/dist/util/template.js';
 
 test('Capacitor 5 extracts templates using patched tar 7', async (t) => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'capacitor-tar-'));

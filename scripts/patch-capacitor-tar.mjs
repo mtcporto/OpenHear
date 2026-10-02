@@ -1,5 +1,7 @@
-const fs = require('node:fs');
-const path = require('node:path');
+import fs from 'node:fs';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
 
 // Capacitor 5 expects tar's CommonJS default export. tar 7 exposes named
 // exports, so keep the security update and adapt the legacy CLI import.
