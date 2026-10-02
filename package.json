@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "check": "npm run lint && npm run typecheck && npm run build",
-    "postinstall": "node scripts/setup-rnnoise.js"
+    "postinstall": "node scripts/setup-rnnoise.js && node scripts/patch-capacitor-tar.cjs",
+    "test:capacitor": "node --test scripts/capacitor-tar.test.cjs"
   },
   "dependencies": {
     "@capacitor/android": "^5.7.8",
