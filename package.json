@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "check": "npm run lint && npm run typecheck && npm run build",
     "postinstall": "node scripts/setup-rnnoise.js && node scripts/patch-capacitor-tar.mjs",
-    "test:capacitor": "node --test scripts/capacitor-tar.test.mjs"
+    "test:capacitor": "node --test scripts/capacitor-tar.test.mjs",
+    "test:braces-security": "node --test vendor/guarded-braces/test/security.test.cjs"
   },
   "dependencies": {
     "@capacitor/android": "^5.7.8",
@@ -32,12 +33,22 @@
     "eslint-config-next": "16.3.8",
     "postcss": "^8.5.26",
     "tailwindcss": "^3.4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "fast-glob": "file:vendor/next-eslint-glob",
+    "braces": "file:vendor/guarded-braces"
   },
   "engines": {
     "node": ">=20.9.0"
   },
   "overrides": {
-    "tar": "^7.5.22"
+    "tar": "^7.5.22",
+    "@next/eslint-plugin-next": {
+      "fast-glob": "$fast-glob"
+    },
+    "postcss-selector-parser": "^7.1.6",
+    "braces": "$braces"
+  },
+  "allowScripts": {
+    "unrs-resolver@1.12.2": true
   }
 }
