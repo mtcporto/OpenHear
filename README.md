@@ -116,3 +116,8 @@ npx vercel
 ## Licença
 
 MIT
+ 
+
+## Desenvolvimento
+
+Baseline: Node.js 24.x. Consulte o `package.json` para instalação, validação e build.
