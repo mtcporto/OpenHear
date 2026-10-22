@@ -617,7 +617,8 @@ export class AudioEngine {
       inputFallback: this.inputFallback,
       outputDeviceId: this.ctx.sinkId || this.settings.outputDeviceId || null,
       outputRoute: this.outputRoute,
-      echoCancellation: trackSettings.echoCancellation ?? null,
+      echoCancellation:
+        trackSettings.echoCancellation == null ? null : Boolean(trackSettings.echoCancellation),
       noiseSuppression: trackSettings.noiseSuppression ?? null,
       autoGainControl: trackSettings.autoGainControl ?? null,
       processingMode: this.settings.processingMode,
